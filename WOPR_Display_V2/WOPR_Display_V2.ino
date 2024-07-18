@@ -262,16 +262,7 @@ void setup()
   countdownToClock = millis() + settings_clockCountdownTime * 1000;
 
   // Display MENU
-  //DisplayText( "MENU" );
-
-  // startup in clock mode
-  Clear();
-  currentMode = CLOCK;
-  currentState = RUNNING;
-  if (settings_ClockRGB == 0)
-    RGB_Clear(true);
-  else
-    RGB_SetBrightness(settings_ClockRGB);
+  DisplayText( "MENU" );
 }
 
 void playSound(uint32_t snd)
