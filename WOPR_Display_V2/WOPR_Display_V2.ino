@@ -105,7 +105,7 @@ bool hasWiFi = false;
 bool isFirstBoot = false;
 
 //// Program & Menu state
-String clockSeparators [] = {" ", "-", "_"};
+String clockSeparators [] = {" ", "-", "_", ">", ":"};
 String stateStrings[] = {"MENU", "RUNNING", "SETTINGS"};
 String menuStrings[] = {"MODE MOVIE", "MODE RANDOM", "MODE MESSAGE", "MODE CLOCK", "SETTINGS"};
 String settingsStrings[] = {"GMT ", "24H MODE ", "BRIGHT ", "CLK RGB ", "CLK CNT ", "CLK SEP ", "UPDATE GMT"};
@@ -154,6 +154,7 @@ byte lastDefconLevel = 0;
 // Audio stuff
 bool beeping = false;
 unsigned long nextBeep = 0;
+unsigned long nextClockLaunch = 0;
 uint8_t beepCount = 3;
 int freq = 2000;
 int channel = 0;
@@ -261,7 +262,16 @@ void setup()
   countdownToClock = millis() + settings_clockCountdownTime * 1000;
 
   // Display MENU
-  DisplayText( "MENU" );
+  //DisplayText( "MENU" );
+
+  // startup in clock mode
+  Clear();
+  currentMode = CLOCK;
+  currentState = RUNNING;
+  if (settings_ClockRGB == 0)
+    RGB_Clear(true);
+  else
+    RGB_SetBrightness(settings_ClockRGB);
 }
 
 void playSound(uint32_t snd)
@@ -375,9 +385,8 @@ void StartWifi()
         RGB_SetColor_ALL( Color(0, 0, 255) );
       }
 
-      delay(1500);
-
-      DisplayText_Scroll( GetSecondsUntilXmas(), 200 );
+      delay(500);
+      //DisplayText_Scroll( GetSecondsUntilXmas(), 200 );
     }
   }
 }
@@ -422,6 +431,9 @@ void BUT1Press()
       currentState = MENU;
 
       DisplayText( "MENU" );
+
+      // reset launch timer
+      nextClockLaunch = 0;
 
       //Shutdown the audio is it's beeping
       playSound(0);
@@ -688,7 +700,12 @@ void DisplayTime()
   }
   // Formt the contents of the time struct into a string for display
   char DateAndTimeString[12];
-  String sep = clockSeparators[settings_separator];
+  //String sep = clockSeparators[settings_separator];
+
+  // blink the string separator
+  static bool blink = true;
+  String sep = blink ? clockSeparators[settings_separator] : clockSeparators[0];
+  blink = !blink;
 
   int the_hour = timeinfo.tm_hour;
 
@@ -1074,6 +1091,26 @@ void loop()
   {
     if ( currentMode == CLOCK )
     {
+      // set the next launch time
+      if (nextClockLaunch == 0) {
+        nextClockLaunch = millis() + ((14400 + random(7200)) * 1000); // trigger every 4 to 6 hours
+        //nextClockLaunch = millis() + ((240 + random(120)) * 1000); // trigger every 4 to 6 minutes
+        Serial.print("Next launch in ");
+        Serial.print((int)((nextClockLaunch - millis()) / 1000));
+        Serial.println(" seconds.");
+
+      // execute the launch
+      } else if (nextClockLaunch < millis()) {
+        Serial.println("*** LAUNCH COUNTDOWN INITIATED ***");
+        currentMode = MOVIE;
+        if ( currentMode != CLOCK )
+          RGB_SetDefcon(5, true);
+        else
+          RGB_Clear(true);
+        ResetCode();
+        Clear();
+      }
+
       // If the Clock RGB brightness is not 0, show the rainbow at the current clock RGB brightness
       if (settings_ClockRGB > 0)
       {
@@ -1084,7 +1121,7 @@ void loop()
       if ( nextBeep < millis() )
       {
         DisplayTime();
-        nextBeep = millis() + 1000;
+        nextBeep = millis() + 500;    // twice a second so we can blink the string separator
       }
     }
     else
@@ -1106,11 +1143,25 @@ void loop()
               beepCount--;
               playSound(1500);
               //              ledcWriteTone(channel, 1500);
+
+              // use nextClockLaunch to start counting how many beep-less times to display "Launching..." before resetting back to CLOCK mode
+              if (beepCount == 0) {
+                nextClockLaunch = 6;
+              }
             }
             else
             {
               RGB_SetDefcon(1, true);
               DisplayText("LAUNCHING...");
+
+              // decrement nextClockLaunch until we reach zero 
+              // then reset back to clock mode
+              nextClockLaunch--;
+              if (nextClockLaunch == 0) {
+                Clear();
+                currentMode = CLOCK;
+                currentState = RUNNING;
+              }
             }
           }
           else
