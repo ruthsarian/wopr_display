@@ -313,6 +313,27 @@ void UpdateGMT_NTP()
   }
 }
 
+// synchronize time with NTP server
+bool syncTimeWithNTP() {
+    Serial.println("Synchronizing clock with NTP server...");
+    configTime(settings_GMT * 3600, 0, ntpServer);
+
+    // Attempt to get local time with a timeout
+    unsigned long startTime = millis();
+    struct tm timeinfo;
+    while (!getLocalTime(&timeinfo)) {
+        if (millis() - startTime > 30000) { // 30 seconds timeout
+            Serial.println("Failed to synchronize with NTP server after 30 seconds.");
+            return false;
+        }
+        delay(500);
+    }
+
+    Serial.print("Time: ");
+    Serial.println(asctime(&timeinfo));
+    return true;
+}
+
 void StartWifi()
 {
 
@@ -367,25 +388,17 @@ void StartWifi()
         UpdateGMT_NTP();
       }
 
-      configTime(settings_GMT * 3600, 0, ntpServer);
-
-      delay(100);
-
-      struct tm timeinfo;
-      if (!getLocalTime(&timeinfo)) {
-        Serial.println("Failed to obtain time");
+//      configTime(settings_GMT * 3600, 0, ntpServer);
+//      delay(100);
+      if (syncTimeWithNTP()) {
+        DisplayText( "Time Set OK" );
+        RGB_SetColor_ALL( Color(0, 0, 255) );
+      } else {
         DisplayText( "Time FAILED" );
         RGB_SetColor_ALL( Color(255, 0, 0) );
       }
-      else
-      {
-        Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
-
-        DisplayText( "Time Set OK" );
-        RGB_SetColor_ALL( Color(0, 0, 255) );
-      }
-
       delay(500);
+
       //DisplayText_Scroll( GetSecondsUntilXmas(), 200 );
     }
   }
@@ -407,7 +420,8 @@ void BUT1_SaveSettings()
     if ( didChangeClockSettings )
     {
       // If the clock parameters were changed, we need to re-set the ESP32 RTC time.
-      configTime(settings_GMT * 3600, 0, ntpServer);
+      //configTime(settings_GMT * 3600, 0, ntpServer);
+      syncTimeWithNTP();
     }
 
     // Reset the menu state after save
